@@ -34,23 +34,25 @@ except (git.exc.InvalidGitRepositoryError) as e:
 master_branch = Head(repo, 'refs/heads/master')
 
 
-def listVersions(filename):
-    db_entry = Query()
-    db_search = db.search(db_entry.filename == filename)
-    if len(db_search) == 0:
-        print(f'No versions of {filename} are currently being tracked by versions')
-    for item in db_search:
+def list_versions(filename):
+    file_tracking_head = get_file_tracking_head(filename)
+    for item in file_tracking_head:
         branch = item.get('branch')
         print('Stored versions of ' + item.get('filename'))
         commits = list(repo.iter_commits(branch))
-        for commit in commits:
-            creation_time = datetime.datetime.fromtimestamp(commit.committed_date)
-            print(f'V: "{commit.message}" D: "{creation_time}" A: "{commit.committer.name}"')
+        for c in commits:
+            creation_time = datetime.datetime.fromtimestamp(c.committed_date)
+            print(f'🔖: "{c.hexsha}" 📄: "{c.message}" ⏱: "{creation_time}" 🙋🏽: "{c.committer.name}"')
 
 
-def newFile(filename):
+def generate_commit_message(num_existing_versions):
+    return 'Version ' + (num_existing_versions + 1)
+
+
+def track_new_file(filename):
     import random
     import string
+    # Generate a new random branch name that is not already taken
     branch_already_exists = True
     while branch_already_exists:
         branch_name = ''.join(random.SystemRandom().choice(string.ascii_letters + string.digits) for _ in range(20))
@@ -62,16 +64,47 @@ def newFile(filename):
     db.insert({'filename': filename, 'branch': branch_name})
     print(f'Created a new git branch called {branch_name} to track {filename}')
     repo.index.add([filename])
-    repo.index.commit("version 1")
+    repo.index.commit(generate_commit_message(0))
     repo.head.reference = master_branch
 
 
+def get_file_tracking_head(filename):
+    db_entry = Query()
+    db_search = db.search(db_entry.filename == filename)
+    if len(db_search) == 0:
+        print(f'No versions of {filename} are currently being tracked by versions')
+        return None
+    return db_search
+
+
+def list_all_tracked_files():
+    print('Files being tracked by versions')
+    all_entries = db.all()
+    for item in all_entries:
+        print(item.get('filename'))
+
+
 if __name__ == '__main__':
+    command = input("Enter command\t")
     filename = input("Enter filename\t")
+
+    if (command == 'ls'):
+        if any([filename == '', filename == None]):
+            list_all_tracked_files()
+            exit()
+        else:
+            list_versions(filename)
+            exit()
+
     file_path = os.path.join(pwd, filename)
     file_exists = os.path.exists(file_path)
     if not file_exists:
         print(f'{file_path} doesnt exist')
         exit()
-    newFile(filename)
-    listVersions(filename)
+
+    if(command == 'cm'):
+        file_tracking_head = get_file_tracking_head(filename)
+        if file_tracking_head == None:
+            track_new_file(filename)
+        else:
+            list_versions(filename)
