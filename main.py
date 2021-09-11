@@ -1,7 +1,8 @@
+import datetime
 import os
 
 import git
-from git import Repo
+from git import Repo, Head
 from tinydb import TinyDB, Query
 
 pwd = '/Users/tssingal/Documents/versions-testing'
@@ -30,8 +31,24 @@ except (git.exc.InvalidGitRepositoryError) as e:
     print("No valid git repository found")
     repo = init_repo()
 
+master_branch = Head(repo, 'refs/heads/master')
 
-def newFile(file_path):
+
+def listVersions(filename):
+    db_entry = Query()
+    db_search = db.search(db_entry.filename == filename)
+    if len(db_search) == 0:
+        print(f'No versions of {filename} are currently being tracked by versions')
+    for item in db_search:
+        branch = item.get('branch')
+        print('Stored versions of ' + item.get('filename'))
+        commits = list(repo.iter_commits(branch))
+        for commit in commits:
+            creation_time = datetime.datetime.fromtimestamp(commit.committed_date)
+            print(f'V: "{commit.message}" D: "{creation_time}" A: "{commit.committer.name}"')
+
+
+def newFile(filename):
     import random
     import string
     branch_already_exists = True
@@ -40,11 +57,13 @@ def newFile(file_path):
         db_entry = Query()
         db_search = db.search(db_entry.branch == branch_name)
         branch_already_exists = len(db_search) > 0
-    repo.create_head(branch_name)
-    db.insert({'filename': file_path, 'branch': branch_name})
-    print(f'Created a new git branch called {branch_name} to track {file_path}')
-    repo.index.add([file_path])
+    # Change the head reference to the new branch
+    repo.head.reference = Head(repo, 'refs/heads/' + branch_name)
+    db.insert({'filename': filename, 'branch': branch_name})
+    print(f'Created a new git branch called {branch_name} to track {filename}')
+    repo.index.add([filename])
     repo.index.commit("version 1")
+    repo.head.reference = master_branch
 
 
 if __name__ == '__main__':
@@ -54,4 +73,5 @@ if __name__ == '__main__':
     if not file_exists:
         print(f'{file_path} doesnt exist')
         exit()
-    newFile(file_path)
+    newFile(filename)
+    listVersions(filename)
