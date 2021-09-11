@@ -24,29 +24,37 @@ def init_repo():
 
 try:
     repo = Repo(pwd)
-except (git.exc.NoSuchPathError) as e:
+except git.exc.NoSuchPathError as e:
     print("No existing git repository found")
     repo = init_repo()
-except (git.exc.InvalidGitRepositoryError) as e:
+except git.exc.InvalidGitRepositoryError as e:
     print("No valid git repository found")
     repo = init_repo()
 
 master_branch = Head(repo, 'refs/heads/master')
 
 
-def list_versions(filename):
+def get_file_versions(filename, do_print: False):
+    commits_list = []
     file_tracking_head = get_file_tracking_head(filename)
     for item in file_tracking_head:
         branch = item.get('branch')
         print('Stored versions of ' + item.get('filename'))
         commits = list(repo.iter_commits(branch))
-        for c in commits:
-            creation_time = datetime.datetime.fromtimestamp(c.committed_date)
-            print(f'🔖: "{c.hexsha}" 📄: "{c.message}" ⏱: "{creation_time}" 🙋🏽: "{c.committer.name}"')
+        commits_list.append(commits)
+        if do_print:
+            print_file_versions(commits)
+    return commits_list
+
+
+def print_file_versions(commits):
+    for c in commits:
+        creation_time = datetime.datetime.fromtimestamp(c.committed_date)
+        print(f'🔖: "{c.hexsha}" 📄: "{c.message}" ⏱: "{creation_time}" 🙋🏽: "{c.committer.name}"')
 
 
 def generate_commit_message(num_existing_versions):
-    return 'Version ' + (num_existing_versions + 1)
+    return 'Version ' + str(num_existing_versions + 1)
 
 
 def track_new_file(filename):
@@ -66,6 +74,21 @@ def track_new_file(filename):
     repo.index.add([filename])
     repo.index.commit(generate_commit_message(0))
     repo.head.reference = master_branch
+
+
+def commit_new_version(filename):
+    tracking_head = get_file_tracking_head(filename)
+    if tracking_head is None:
+        print("ERROR: Cannot commit new versions of untracked files!")
+        return None
+    branch_name = tracking_head[0].get('branch')
+    repo.head.reference = Head(repo, 'refs/heads/' + branch_name)
+    repo.index.add([filename])
+    commits = list(repo.iter_commits(branch_name))
+    repo.index.commit(generate_commit_message(len(commits)))
+    repo.head.reference = master_branch
+    # in case file disappears -> print(f'git merge {branch_name} --allow-unrelated-histories --squash')
+    print(f"Stored new version of {filename}")
 
 
 def get_file_tracking_head(filename):
@@ -88,12 +111,12 @@ if __name__ == '__main__':
     command = input("Enter command\t")
     filename = input("Enter filename\t")
 
-    if (command == 'ls'):
-        if any([filename == '', filename == None]):
+    if command == 'ls':
+        if any([filename == '', filename is None]):
             list_all_tracked_files()
             exit()
         else:
-            list_versions(filename)
+            get_file_versions(filename, True)
             exit()
 
     file_path = os.path.join(pwd, filename)
@@ -102,9 +125,9 @@ if __name__ == '__main__':
         print(f'{file_path} doesnt exist')
         exit()
 
-    if(command == 'cm'):
+    if command == 'cm':
         file_tracking_head = get_file_tracking_head(filename)
-        if file_tracking_head == None:
+        if file_tracking_head is None:
             track_new_file(filename)
         else:
-            list_versions(filename)
+            commit_new_version(filename)
