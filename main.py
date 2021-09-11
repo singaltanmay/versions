@@ -1,3 +1,4 @@
+import argparse
 import datetime
 import os
 
@@ -108,10 +109,19 @@ def list_all_tracked_files():
 
 
 if __name__ == '__main__':
-    command = input("Enter command\t")
-    filename = input("Enter filename\t")
+    parser = argparse.ArgumentParser(prog='versions',
+                                     description="Track the various versions of your files using a simple CLI")
+    parser.add_argument("cmd", help="The command that you want to run", type=str, nargs='?')
+    parser.add_argument("--file", help="The file you want to run the command on", dest="filename", type=str)
+    args = parser.parse_args()
 
-    if command == 'ls':
+    filename = args.filename
+    cmd = args.cmd
+
+    if cmd is None:
+        parser.parse_args(['--help'])
+
+    if cmd == 'ls':
         if any([filename == '', filename is None]):
             list_all_tracked_files()
             exit()
@@ -119,13 +129,16 @@ if __name__ == '__main__':
             get_file_versions(filename, True)
             exit()
 
+    if (filename is None):
+        print('No file specified. Use the --file flag to input a file. Run "versions --help" for more info.')
+        exit()
     file_path = os.path.join(pwd, filename)
     file_exists = os.path.exists(file_path)
     if not file_exists:
         print(f'{file_path} doesnt exist')
         exit()
 
-    if command == 'cm':
+    if cmd == 'cm':
         file_tracking_head = get_file_tracking_head(filename)
         if file_tracking_head is None:
             track_new_file(filename)
