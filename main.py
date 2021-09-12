@@ -1,6 +1,8 @@
 import argparse
 import datetime
 import os
+import random
+import string
 
 import git
 from git import Repo, Head
@@ -51,7 +53,7 @@ def get_file_versions(filename, do_print: False):
 def print_file_versions(commits):
     for c in commits:
         creation_time = datetime.datetime.fromtimestamp(c.committed_date)
-        print(f'🔖: "{c.hexsha}" 📄: "{c.message}" ⏱: "{creation_time}" 🙋🏽: "{c.committer.name}"')
+        print(f'🔖: "{c.hexsha}" 📄: "{c.message}" ⏱: "{creation_time}" 🙋: "{c.committer.name}"')
 
 
 def generate_commit_message(num_existing_versions):
@@ -59,8 +61,6 @@ def generate_commit_message(num_existing_versions):
 
 
 def track_new_file(filename):
-    import random
-    import string
     # Generate a new random branch name that is not already taken
     branch_already_exists = True
     while branch_already_exists:
@@ -96,23 +96,30 @@ def get_file_tracking_head(filename):
     db_entry = Query()
     db_search = db.search(db_entry.filename == filename)
     if len(db_search) == 0:
-        print(f'No versions of {filename} are currently being tracked by versions')
+        print(f'No versions of {filename} are currently being tracked by versions.')
         return None
     return db_search
 
 
 def list_all_tracked_files():
-    print('Files being tracked by versions')
+    print('Files being tracked by versions:')
     all_entries = db.all()
     for item in all_entries:
         print(item.get('filename'))
+
+
+# TODO
+def restore_file_to_version(filename, commit):
+    pass
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='versions',
                                      description="Track the various versions of your files using a simple CLI")
     parser.add_argument("cmd", help="The command that you want to run", type=str, nargs='?')
-    parser.add_argument("--file", help="The file you want to run the command on", dest="filename", type=str)
+    parser.add_argument("-f", "--file", help="The file you want to run the command on", dest="filename", type=str)
+    parser.add_argument("-t", "--tag", help="The tag value of a particular version of the file", dest="hexsha",
+                        type=str)
     args = parser.parse_args()
 
     filename = args.filename
@@ -124,10 +131,10 @@ if __name__ == '__main__':
     if cmd == 'ls':
         if any([filename == '', filename is None]):
             list_all_tracked_files()
-            exit()
+            exit(0)
         else:
             get_file_versions(filename, True)
-            exit()
+            exit(0)
 
     if (filename is None):
         print('No file specified. Use the --file flag to input a file. Run "versions --help" for more info.')
@@ -136,7 +143,7 @@ if __name__ == '__main__':
     file_exists = os.path.exists(file_path)
     if not file_exists:
         print(f'{file_path} doesnt exist')
-        exit()
+        exit(1)
 
     if cmd == 'cm':
         file_tracking_head = get_file_tracking_head(filename)
@@ -144,3 +151,24 @@ if __name__ == '__main__':
             track_new_file(filename)
         else:
             commit_new_version(filename)
+
+    if cmd == 'restore':
+        file_tracking_head = get_file_tracking_head(filename)
+        if file_tracking_head is None:
+            print("ERROR: Cannot restore. File is not being tracked by versions.")
+            exit(1)
+        version_head = None
+        hexsha = args.hexsha
+        if hexsha is None:
+            print(f'Tag value is required for versions to restore your file.\n'
+                  f'Run "versions ls --file {filename}" to find a list of all the stored versions of your file.')
+            exit(1)
+        # Look for commits for the file with the user provided hexsha value
+        for item in file_tracking_head:
+            branch = item.get('branch')
+            commits = list(repo.iter_commits(branch))
+            version_head = list(filter(lambda c: c.hexsha == hexsha, commits))
+        if version_head is None or len(version_head) == 0:
+            print(f"No version of {filename} found for the tag {hexsha}")
+            exit(1)
+        restore_file_to_version(filename, version_head[0])
