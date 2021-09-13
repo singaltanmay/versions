@@ -10,18 +10,28 @@ from tinydb import TinyDB, Query
 
 pwd = '/Users/tssingal/Documents/versions-testing'
 # os.getcwd()
-db = TinyDB(pwd + '/.versions_db.json')
+app_path = os.path.join(pwd, '.versions')
+
+if not os.path.exists(app_path):
+    os.mkdir(app_path)
+db = TinyDB(os.path.join(app_path, 'versions_db.json'))
 
 
 def init_repo():
     r = Repo.init(pwd)
     print(f"Created new git repository at {pwd}")
     # This function just creates an empty file ...
-    startup_test = os.path.join(pwd, '.versions_init_object')
-    open(startup_test, 'wb').close()
+    startup_test = os.path.join(app_path, 'versions_init_object')
+    with open(startup_test, 'w') as f:
+        f.write(f'Started using versions on {datetime.datetime.now()}')
+        f.close()
     r.index.add([startup_test])
     r.index.commit("Started using versions!")
-    os.remove(startup_test)
+    infoexcludepath = os.path.join(pwd, os.path.join('.git', os.path.join('info', 'exclude')))
+    with open(infoexcludepath, 'a') as f:
+        f.write(app_path + '\n')
+        f.write(os.path.join(app_path, "*"))
+        f.close()
     return r
 
 
@@ -84,7 +94,7 @@ def commit_new_version(filename):
         return None
     branch_name = tracking_head[0].get('branch')
     repo.head.reference = Head(repo, 'refs/heads/' + branch_name)
-    repo.index.add([filename])
+    repo.index.add([os.path.join(pwd, filename)])
     commits = list(repo.iter_commits(branch_name))
     repo.index.commit(generate_commit_message(len(commits)))
     repo.head.reference = master_branch
