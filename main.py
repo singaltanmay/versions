@@ -29,8 +29,7 @@ def init_repo():
     r.index.commit("Started using versions!")
     infoexcludepath = os.path.join(pwd, os.path.join('.git', os.path.join('info', 'exclude')))
     with open(infoexcludepath, 'a') as f:
-        f.write(app_path + '\n')
-        f.write(os.path.join(app_path, "*"))
+        f.write(app_path)
         f.close()
     return r
 
@@ -85,6 +84,7 @@ def track_new_file(filename):
     repo.index.add([filename])
     repo.index.commit(generate_commit_message(0))
     repo.head.reference = master_branch
+    print("Committed first version")
 
 
 def commit_new_version(filename):
@@ -118,27 +118,29 @@ def list_all_tracked_files():
         print(item.get('filename'))
 
 
-# TODO
 def restore_file_to_version(filename, commit):
-    pass
+    repo.git.checkout(commit.hexsha, filename)
+    print(f'{filename} successfully restored to version {hexsha}')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='versions',
                                      description="Track the various versions of your files using a simple CLI")
-    parser.add_argument("cmd", help="The command that you want to run", type=str, nargs='?')
+    parser.add_argument("cmd", help="The command that you want to run", type=str, nargs='*')
     parser.add_argument("-f", "--file", help="The file you want to run the command on", dest="filename", type=str)
     parser.add_argument("-t", "--tag", help="The tag value of a particular version of the file", dest="hexsha",
                         type=str)
     args = parser.parse_args()
 
-    filename = args.filename
-    cmd = args.cmd
+    cmd = args.cmd[0]
+    # TODO run commands for multiple files
+    all_filenames = args.cmd[1::]
+    filename = args.filename or all_filenames[0]
 
     if cmd is None:
         parser.parse_args(['--help'])
 
-    if cmd == 'ls':
+    if cmd == 'ls' or cmd == "list":
         if any([filename == '', filename is None]):
             list_all_tracked_files()
             exit(0)
@@ -149,20 +151,9 @@ if __name__ == '__main__':
     if (filename is None):
         print('No file specified. Use the --file flag to input a file. Run "versions --help" for more info.')
         exit()
-    file_path = os.path.join(pwd, filename)
-    file_exists = os.path.exists(file_path)
-    if not file_exists:
-        print(f'{file_path} doesnt exist')
-        exit(1)
 
-    if cmd == 'cm':
-        file_tracking_head = get_file_tracking_head(filename)
-        if file_tracking_head is None:
-            track_new_file(filename)
-        else:
-            commit_new_version(filename)
 
-    if cmd == 'restore':
+    if cmd == 'rs' or cmd == 'restore':
         file_tracking_head = get_file_tracking_head(filename)
         if file_tracking_head is None:
             print("ERROR: Cannot restore. File is not being tracked by versions.")
@@ -182,3 +173,17 @@ if __name__ == '__main__':
             print(f"No version of {filename} found for the tag {hexsha}")
             exit(1)
         restore_file_to_version(filename, version_head[0])
+
+
+    file_path = os.path.join(pwd, filename)
+    file_exists = os.path.exists(file_path)
+    if not file_exists:
+        print(f'{file_path} doesnt exist')
+        exit(1)
+
+    if cmd == 'commit' or cmd == 'cm':
+        file_tracking_head = get_file_tracking_head(filename)
+        if file_tracking_head is None:
+            track_new_file(filename)
+        else:
+            commit_new_version(filename)
