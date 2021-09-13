@@ -18,3 +18,9 @@ A git based file tracking tool that let's you maintain various versions of files
 <img width="976" alt="Screenshot 2021-09-13 at 6 41 46 PM" src="https://user-images.githubusercontent.com/31047659/133089751-03ec1535-f4bc-4e70-b123-713287fb58b1.png">
 
 
+### Listing all files being tracked by versions
+`$ versions ls`
+
+<img width="976" alt="Screenshot 2021-09-13 at 6 44 29 PM" src="https://user-images.githubusercontent.com/31047659/133090038-6b9ba5ac-a0cf-4256-ae0b-dec3054effa5.png">
+
+
