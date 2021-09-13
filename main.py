@@ -45,9 +45,9 @@ except git.exc.InvalidGitRepositoryError as e:
 master_branch = Head(repo, 'refs/heads/master')
 
 
-def get_file_versions(filename, do_print: False):
+def get_file_versions(abs_filepath, do_print: False):
     commits_list = []
-    file_tracking_head = get_file_tracking_head(filename)
+    file_tracking_head = get_file_tracking_head(abs_filepath)
     if file_tracking_head is None or len(file_tracking_head) == 0:
         return None
     for item in file_tracking_head:
@@ -105,11 +105,11 @@ def commit_new_version(abs_filepath):
     print(f"Stored new version of {abs_filepath}")
 
 
-def get_file_tracking_head(filename):
+def get_file_tracking_head(abs_filepath):
     db_entry = Query()
-    db_search = db.search(db_entry.filename == filename)
+    db_search = db.search(db_entry.filename == abs_filepath)
     if len(db_search) == 0:
-        print(f'No versions of {filename} are currently being tracked by versions.')
+        print(f'No versions of {abs_filepath} are currently being tracked by versions.')
         return None
     return db_search
 
@@ -136,8 +136,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if len(args.cmd) == 0:
-        print("No command specified!")
-        exit(1)
+        parser.parse_args(['--help'])
     cmd = args.cmd[0]
     rel_filepath = args.filename
     # TODO run commands for multiple files
@@ -145,28 +144,24 @@ if __name__ == '__main__':
         all_rel_filepaths = args.cmd[1::]
         rel_filepath = all_rel_filepaths[0]
 
-    abs_filepath = os.path.abspath(rel_filepath)
-    filename = os.path.basename(abs_filepath)
+    if rel_filepath is not None and rel_filepath != ' ':
+        abs_filepath = os.path.abspath(rel_filepath)
+        filename = os.path.basename(abs_filepath)
 
-    if cmd is None:
-        parser.parse_args(['--help'])
-
-    if cmd == 'ls' or cmd == "list":
-        if any([rel_filepath == '', rel_filepath is None]):
-            if list_all_tracked_files() is None:
-                exit(1)
-            else:
-                exit(0)
+    if (cmd == 'ls' or cmd == "list") and any([rel_filepath == '', rel_filepath is None]):
+        if list_all_tracked_files() is None:
+            exit(1)
         else:
-            versions = get_file_versions(abs_filepath, True)
-            if versions is None or len(versions) == 0:
-                exit(1)
-            else:
-                exit(0)
+            exit(0)
 
     if rel_filepath is None:
         print('No file specified. Use the --file flag to input a file. Run "versions --help" for more info.')
         exit()
+
+    file_exists = os.path.exists(abs_filepath)
+    if not file_exists:
+        print(f'{abs_filepath} does not exist')
+        exit(1)
 
     if cmd == 'rs' or cmd == 'restore':
         file_tracking_head = get_file_tracking_head(abs_filepath)
@@ -189,10 +184,13 @@ if __name__ == '__main__':
             exit(1)
         restore_file_to_version(rel_filepath, version_head[0])
 
-    file_exists = os.path.exists(abs_filepath)
-    if not file_exists:
-        print(f'{abs_filepath} does not exist')
-        exit(1)
+    # ls command for a particular file
+    if cmd == 'ls' or cmd == "list":
+        versions = get_file_versions(abs_filepath, True)
+        if versions is None or len(versions) == 0:
+            exit(1)
+        else:
+            exit(0)
 
     if cmd == 'commit' or cmd == 'cm':
         file_tracking_head = get_file_tracking_head(abs_filepath)
