@@ -8,8 +8,7 @@ import git
 from git import Repo, Head
 from tinydb import TinyDB, Query
 
-pwd = '/Users/tssingal/Documents/versions-testing'
-# os.getcwd()
+pwd = os.getcwd()
 app_path = os.path.join(pwd, '.versions')
 
 if not os.path.exists(app_path):
@@ -49,6 +48,8 @@ master_branch = Head(repo, 'refs/heads/master')
 def get_file_versions(filename, do_print: False):
     commits_list = []
     file_tracking_head = get_file_tracking_head(filename)
+    if file_tracking_head is None or len(file_tracking_head) == 0:
+        return None
     for item in file_tracking_head:
         branch = item.get('branch')
         print('Stored versions of ' + item.get('filename'))
@@ -69,7 +70,7 @@ def generate_commit_message(num_existing_versions):
     return 'Version ' + str(num_existing_versions + 1)
 
 
-def track_new_file(filename):
+def track_new_file(abs_filepath):
     # Generate a new random branch name that is not already taken
     branch_already_exists = True
     while branch_already_exists:
@@ -79,27 +80,29 @@ def track_new_file(filename):
         branch_already_exists = len(db_search) > 0
     # Change the head reference to the new branch
     repo.head.reference = Head(repo, 'refs/heads/' + branch_name)
-    db.insert({'filename': filename, 'branch': branch_name})
+    filename = os.path.basename(abs_filepath)
+    db.insert({'filename': abs_filepath, 'branch': branch_name})
     print(f'Created a new git branch called {branch_name} to track {filename}')
-    repo.index.add([filename])
+    repo.index.add([abs_filepath])
     repo.index.commit(generate_commit_message(0))
     repo.head.reference = master_branch
     print("Committed first version")
 
 
-def commit_new_version(filename):
-    tracking_head = get_file_tracking_head(filename)
+def commit_new_version(abs_filepath):
+    tracking_head = get_file_tracking_head(abs_filepath)
     if tracking_head is None:
         print("ERROR: Cannot commit new versions of untracked files!")
         return None
     branch_name = tracking_head[0].get('branch')
     repo.head.reference = Head(repo, 'refs/heads/' + branch_name)
-    repo.index.add([os.path.join(pwd, filename)])
+    repo.index.add([os.path.join(pwd, abs_filepath)])
     commits = list(repo.iter_commits(branch_name))
     repo.index.commit(generate_commit_message(len(commits)))
     repo.head.reference = master_branch
     # in case file disappears -> print(f'git merge {branch_name} --allow-unrelated-histories --squash')
-    print(f"Stored new version of {filename}")
+    abs_filepath = os.path.basename(abs_filepath)
+    print(f"Stored new version of {abs_filepath}")
 
 
 def get_file_tracking_head(filename):
@@ -132,29 +135,41 @@ if __name__ == '__main__':
                         type=str)
     args = parser.parse_args()
 
+    if len(args.cmd) == 0:
+        print("No command specified!")
+        exit(1)
     cmd = args.cmd[0]
+    rel_filepath = args.filename
     # TODO run commands for multiple files
-    all_filenames = args.cmd[1::]
-    filename = args.filename or all_filenames[0]
+    if rel_filepath is None and len(args.cmd) > 1:
+        all_rel_filepaths = args.cmd[1::]
+        rel_filepath = all_rel_filepaths[0]
+
+    abs_filepath = os.path.abspath(rel_filepath)
+    filename = os.path.basename(abs_filepath)
 
     if cmd is None:
         parser.parse_args(['--help'])
 
     if cmd == 'ls' or cmd == "list":
-        if any([filename == '', filename is None]):
-            list_all_tracked_files()
-            exit(0)
+        if any([rel_filepath == '', rel_filepath is None]):
+            if list_all_tracked_files() is None:
+                exit(1)
+            else:
+                exit(0)
         else:
-            get_file_versions(filename, True)
-            exit(0)
+            versions = get_file_versions(abs_filepath, True)
+            if versions is None or len(versions) == 0:
+                exit(1)
+            else:
+                exit(0)
 
-    if (filename is None):
+    if rel_filepath is None:
         print('No file specified. Use the --file flag to input a file. Run "versions --help" for more info.')
         exit()
 
-
     if cmd == 'rs' or cmd == 'restore':
-        file_tracking_head = get_file_tracking_head(filename)
+        file_tracking_head = get_file_tracking_head(abs_filepath)
         if file_tracking_head is None:
             print("ERROR: Cannot restore. File is not being tracked by versions.")
             exit(1)
@@ -162,7 +177,7 @@ if __name__ == '__main__':
         hexsha = args.hexsha
         if hexsha is None:
             print(f'Tag value is required for versions to restore your file.\n'
-                  f'Run "versions ls --file {filename}" to find a list of all the stored versions of your file.')
+                  f'Run "versions ls --file {abs_filepath}" to find a list of all the stored versions of your file.')
             exit(1)
         # Look for commits for the file with the user provided hexsha value
         for item in file_tracking_head:
@@ -170,20 +185,18 @@ if __name__ == '__main__':
             commits = list(repo.iter_commits(branch))
             version_head = list(filter(lambda c: c.hexsha == hexsha, commits))
         if version_head is None or len(version_head) == 0:
-            print(f"No version of {filename} found for the tag {hexsha}")
+            print(f"No version of {rel_filepath} found for the tag {hexsha}")
             exit(1)
-        restore_file_to_version(filename, version_head[0])
+        restore_file_to_version(rel_filepath, version_head[0])
 
-
-    file_path = os.path.join(pwd, filename)
-    file_exists = os.path.exists(file_path)
+    file_exists = os.path.exists(abs_filepath)
     if not file_exists:
-        print(f'{file_path} doesnt exist')
+        print(f'{abs_filepath} does not exist')
         exit(1)
 
     if cmd == 'commit' or cmd == 'cm':
-        file_tracking_head = get_file_tracking_head(filename)
+        file_tracking_head = get_file_tracking_head(abs_filepath)
         if file_tracking_head is None:
-            track_new_file(filename)
+            track_new_file(abs_filepath)
         else:
-            commit_new_version(filename)
+            commit_new_version(abs_filepath)
